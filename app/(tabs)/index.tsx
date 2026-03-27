@@ -1,98 +1,233 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+
+type Post = {
+    id: string;
+    author: string;
+    content: string;
+};
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    const [user] = useState({ full_name: 'My Profile' });
+    const [posts, setPosts] = useState<Post[]>([
+        { id: '1', author: 'Community Admin', content: 'Welcome to the community feed!' },
+    ]);
+    const [newPost, setNewPost] = useState('');
+    const [loading] = useState(false);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    const handlePostCreated = () => {
+        if (!newPost.trim()) return;
+
+        const createdPost: Post = {
+            id: Date.now().toString(),
+            author: user.full_name,
+            content: newPost.trim(),
+        };
+
+        setPosts((previousPosts) => [createdPost, ...previousPosts]);
+        setNewPost('');
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.loadingWrap}>
+                <ActivityIndicator size="large" color="#3b5998" />
+            </View>
+        );
+    }
+
+    return (
+        <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+            {/* <View style={styles.profileCard}>
+                <View style={styles.avatar}>
+                    <ThemedText style={styles.avatarText}>{user.full_name.charAt(0)}</ThemedText>
+                </View>
+                <ThemedText style={styles.profileName}>{user.full_name}</ThemedText>
+            </View> */}
+
+            {/* <View style={styles.shortcutsRow}>
+                <View style={styles.shortcutItem}>
+                    <IconSymbol size={22} name="person.2.fill" color="#3b5998" />
+                    <ThemedText style={styles.shortcutText}>Find Friends</ThemedText>
+                </View>
+                <View style={styles.shortcutItem}>
+                    <IconSymbol size={22} name="briefcase.fill" color="#3b5998" />
+                    <ThemedText style={styles.shortcutText}>Businesses</ThemedText>
+                </View>
+            </View> */}
+
+            <View style={styles.composerCard}>
+                <TextInput
+                    style={styles.composerInput}
+                    placeholder="Share something with the community..."
+                    placeholderTextColor="#7d8691"
+                    value={newPost}
+                    onChangeText={setNewPost}
+                    multiline
+                />
+                <TouchableOpacity
+                    style={[styles.postButton, !newPost.trim() ? styles.postButtonDisabled : undefined]}
+                    onPress={handlePostCreated}
+                    disabled={!newPost.trim()}>
+                    <ThemedText style={styles.postButtonText}>Post</ThemedText>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.feedWrap}>
+                {posts.length > 0 ? (
+                    posts.map((post) => (
+                        <View key={post.id} style={styles.postCard}>
+                            <ThemedText style={styles.postAuthor}>{post.author}</ThemedText>
+                            <ThemedText style={styles.postContent}>{post.content}</ThemedText>
+                        </View>
+                    ))
+                ) : (
+                    <View style={styles.emptyCard}>
+                        <ThemedText style={styles.emptyText}>
+                            No posts yet. Be the first to share something with the community!
+                        </ThemedText>
+                    </View>
+                )}
+            </View>
+        </ScrollView>
+    );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    screen: {
+        flex: 1,
+        backgroundColor: '#f3f4f6',
+    },
+    content: {
+        padding: 16,
+        gap: 14,
+    },
+    loadingWrap: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#ffffff',
+    },
+    profileCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    avatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        backgroundColor: '#dbeafe',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    avatarText: {
+        color: '#1e40af',
+        fontWeight: '700',
+    },
+    profileName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#111827',
+    },
+    shortcutsRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    shortcutItem: {
+        flex: 1,
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    shortcutText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1f2937',
+    },
+    composerCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        gap: 10,
+    },
+    composerInput: {
+        minHeight: 84,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        textAlignVertical: 'top',
+        color: '#111827',
+        fontSize: 15,
+        backgroundColor: '#ffffff',
+    },
+    postButton: {
+        alignSelf: 'flex-end',
+        backgroundColor: '#3b5998',
+        paddingHorizontal: 16,
+        paddingVertical: 9,
+        borderRadius: 8,
+    },
+    postButtonDisabled: {
+        opacity: 0.5,
+    },
+    postButtonText: {
+        color: '#ffffff',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    feedWrap: {
+        gap: 10,
+        paddingBottom: 20,
+    },
+    postCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        gap: 6,
+    },
+    postAuthor: {
+        fontWeight: '700',
+        color: '#111827',
+        fontSize: 14,
+    },
+    postContent: {
+        color: '#374151',
+        fontSize: 15,
+        lineHeight: 20,
+    },
+    emptyCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        alignItems: 'center',
+    },
+    emptyText: {
+        color: '#6b7280',
+        textAlign: 'center',
+        fontSize: 15,
+        lineHeight: 22,
+    },
 });

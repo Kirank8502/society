@@ -1,112 +1,271 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { getAllUsers, UserProfile } from '../services/firestoreService';
 
-export default function TabTwoScreen() {
+export default function ExploreScreen() {
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const loadProfiles = async () => {
+      try {
+        const users = await getAllUsers();
+        setProfiles(users);
+      } catch (error) {
+        console.error('Error loading profiles:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProfiles();
+  }, []);
+
+  const filteredProfiles = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return profiles;
+    }
+
+    return profiles.filter((profile) => {
+      return (
+        profile.fullName.toLowerCase().includes(query) ||
+        profile.profession.toLowerCase().includes(query) ||
+        profile.location.toLowerCase().includes(query)
+      );
+    });
+  }, [searchQuery, profiles]);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.heroCard}>
+        <View style={styles.heroHeaderRow}>
+          <View style={styles.usersBadge}>
+            <MaterialIcons name="groups" size={24} color="#3b5998" />
+          </View>
+          <View style={styles.heroTextWrap}>
+            <ThemedText style={styles.title}>Member Directory</ThemedText>
+            <ThemedText style={styles.subtitle}>
+              Find friends and connect with people in your community.
             </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+          </View>
+        </View>
+
+        <View style={styles.searchWrap}>
+          <MaterialIcons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name, job, or city..."
+            placeholderTextColor="#9ca3af"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      </View>
+
+      <View style={styles.cardsWrap}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3b5998" />
+          </View>
+        ) : filteredProfiles.length > 0 ? (
+          filteredProfiles.map((profile) => (
+            <View key={profile.id} style={styles.profileCard}>
+              <View style={styles.avatarWrap}>
+                <ThemedText style={styles.avatarText}>{profile.fullName.charAt(0)}</ThemedText>
+              </View>
+
+              <ThemedText style={styles.profileName}>{profile.fullName}</ThemedText>
+              <ThemedText style={styles.profileProfession}>{profile.profession}</ThemedText>
+
+              <View style={styles.locationPill}>
+                <MaterialIcons name="location-on" size={14} color="#6b7280" />
+                <ThemedText style={styles.locationText}>{profile.location}</ThemedText>
+              </View>
+
+              <Pressable style={styles.addFriendButton}>
+                <MaterialIcons name="person-add" size={16} color="#1f2937" />
+                <ThemedText style={styles.addFriendText}>Add Friend</ThemedText>
+              </Pressable>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyCard}>
+            <MaterialIcons name="groups" size={44} color="#d1d5db" />
+            <ThemedText style={styles.emptyTitle}>No Members Found</ThemedText>
+            <ThemedText style={styles.emptySubtitle}>Try adjusting your search criteria.</ThemedText>
+          </View>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  screen: {
+    flex: 1,
+    backgroundColor: '#f0f2f5',
   },
-  titleContainer: {
+  content: {
+    padding: 16,
+    gap: 14,
+    paddingBottom: 24,
+  },
+  heroCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 16,
+    gap: 14,
+  },
+  heroHeaderRow: {
     flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  usersBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    backgroundColor: '#e8f0ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTextWrap: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+  searchWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 2,
+  },
+  searchInput: {
+    height: 46,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+    paddingLeft: 40,
+    paddingRight: 12,
+    color: '#111827',
+    fontSize: 15,
+  },
+  cardsWrap: {
+    gap: 10,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  profileCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 16,
+    alignItems: 'center',
     gap: 8,
+  },
+  avatarWrap: {
+    width: 66,
+    height: 66,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8f0ff',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  avatarText: {
+    color: '#3b5998',
+    fontWeight: '700',
+    fontSize: 24,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 4,
+  },
+  profileProfession: {
+    fontSize: 14,
+    color: '#3b5998',
+    fontWeight: '600',
+  },
+  locationPill: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  locationText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  addFriendButton: {
+    marginTop: 8,
+    width: '100%',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f0f2f5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  addFriendText: {
+    color: '#1f2937',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  emptyCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  emptyTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    color: '#6b7280',
+    fontSize: 14,
   },
 });
