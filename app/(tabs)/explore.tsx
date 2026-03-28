@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { getCurrentUser } from '../services/authService';
 import { getAllUsers, UserProfile } from '../services/firestoreService';
 
 export default function ExploreScreen() {
@@ -13,8 +14,9 @@ export default function ExploreScreen() {
   useEffect(() => {
     const loadProfiles = async () => {
       try {
+        const currentUser = getCurrentUser();
         const users = await getAllUsers();
-        setProfiles(users);
+        setProfiles(currentUser ? users.filter((user) => user.id !== currentUser.uid) : users);
       } catch (error) {
         console.error('Error loading profiles:', error);
       } finally {

@@ -1,10 +1,20 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { logoutUser } from '../services/authService';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -31,6 +41,48 @@ export default function SettingsScreen() {
       Alert.alert('Logout Failed', 'Please try again.');
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handlePushNotificationsToggle = async (enabled: boolean) => {
+    if (!enabled) {
+      setPushNotifications(false);
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Supported', 'Push notifications are not supported on web in this app.');
+      setPushNotifications(false);
+      return;
+    }
+
+    try {
+      const permission = await Notifications.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Please allow notifications to enable this setting.');
+        setPushNotifications(false);
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.DEFAULT,
+        });
+      }
+
+      setPushNotifications(true);
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Push Notifications Enabled',
+          body: 'You will now receive updates from chats and activity.',
+        },
+        trigger: null,
+      });
+    } catch (error) {
+      console.error('Push notification setup failed:', error);
+      Alert.alert('Error', 'Failed to enable notifications. Please try again.');
+      setPushNotifications(false);
     }
   };
 
@@ -81,7 +133,7 @@ export default function SettingsScreen() {
           </View>
           <Switch
             value={pushNotifications}
-            onValueChange={setPushNotifications}
+            onValueChange={handlePushNotificationsToggle}
             trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
             thumbColor={pushNotifications ? '#3b5998' : '#f3f4f6'}
           />
