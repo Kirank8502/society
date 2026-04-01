@@ -1,11 +1,11 @@
 // Authentication service helper
 import {
-  createUserWithEmailAndPassword,
-  fetchSignInMethodsForEmail,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-  User,
+    createUserWithEmailAndPassword,
+    fetchSignInMethodsForEmail,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile,
+    User,
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -43,6 +43,10 @@ export const registerUser = async (
     await setDoc(doc(db, 'users', user.uid), {
       email: normalizedEmail,
       fullName,
+      profileImageUrl: '',
+      notificationsLastSeenFriendRequestAt: '',
+      notificationsLastSeenBusinessAt: '',
+      notificationsLastSeenChatAt: '',
       location: '',
       profession: '',
       about: '',

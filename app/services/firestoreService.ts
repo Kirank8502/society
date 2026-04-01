@@ -1,18 +1,19 @@
 // Firestore service helpers
 import {
-    addDoc,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    limit,
-    onSnapshot,
-    orderBy,
-    query,
-    setDoc,
-    Unsubscribe,
-    updateDoc,
-    where,
+  addDoc,
+  arrayUnion,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  Unsubscribe,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -20,6 +21,10 @@ export interface UserProfile {
   id: string;
   email: string;
   fullName: string;
+  profileImageUrl?: string;
+  notificationsLastSeenFriendRequestAt?: string;
+  notificationsLastSeenBusinessAt?: string;
+  notificationsLastSeenChatAt?: string;
   location: string;
   profession: string;
   about: string;
@@ -49,9 +54,34 @@ export interface Message {
 export interface ChatPreview {
   id: string;
   name: string;
+  avatarUrl?: string;
   lastMessage: string;
+  lastMessageSenderUid?: string;
+  updatedAt?: string;
   time: string;
   unreadCount: number;
+}
+
+export interface FriendProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  profileImageUrl?: string;
+  location: string;
+  profession: string;
+  about: string;
+  friendedAt: string;
+}
+
+export interface FriendRequest {
+  id: string;
+  fromUid: string;
+  toUid: string;
+  fromName: string;
+  fromEmail: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  updatedAt: string;
 }
 
 type ChatDocument = {
@@ -59,6 +89,7 @@ type ChatDocument = {
   participantNames?: Record<string, string>;
   chatName?: string;
   lastMessage?: string;
+  lastMessageSenderUid?: string;
   updatedAt?: string;
 };
 
@@ -84,6 +115,11 @@ const formatRelativeTime = (timestamp?: string) => {
 
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays}d`;
+};
+
+const isPermissionError = (error: unknown): boolean => {
+  const code = (error as { code?: string })?.code;
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
 };
 
 // Users
@@ -125,6 +161,223 @@ export const getAllUsers = async (): Promise<UserProfile[]> => {
     } as UserProfile));
   } catch (error) {
     console.error('Error fetching users:', error);
+    throw error;
+  }
+};
+
+export const addFriendConnection = async (
+  currentUser: UserProfile,
+  targetUser: UserProfile
+): Promise<void> => {
+  if (currentUser.id === targetUser.id) {
+    return;
+  }
+
+  try {
+    const currentUserRef = doc(db, 'users', currentUser.id);
+    await setDoc(
+      currentUserRef,
+      {
+        friendIds: arrayUnion(targetUser.id),
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error adding friend:', error);
+    throw error;
+  }
+};
+
+export const sendFriendRequest = async (
+  currentUser: UserProfile,
+  targetUser: UserProfile
+): Promise<void> => {
+  if (currentUser.id === targetUser.id) {
+    return;
+  }
+
+  try {
+    const now = new Date().toISOString();
+    const requestId = `${currentUser.id}_${targetUser.id}`;
+    await setDoc(
+      doc(db, 'friend_requests', requestId),
+      {
+        fromUid: currentUser.id,
+        toUid: targetUser.id,
+        fromName: currentUser.fullName || 'Community Member',
+        fromEmail: currentUser.email || '',
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    await setDoc(
+      doc(db, 'users', currentUser.id),
+      {
+        outgoingRequestIds: arrayUnion(targetUser.id),
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error sending friend request:', error);
+    throw error;
+  }
+};
+
+export const getIncomingFriendRequests = async (userUid: string): Promise<FriendRequest[]> => {
+  try {
+    const requestSnapshot = await getDocs(
+      query(
+        collection(db, 'friend_requests'),
+        where('toUid', '==', userUid),
+        where('status', '==', 'pending')
+      )
+    );
+
+    return requestSnapshot.docs
+      .map((requestDoc) => {
+        const data = requestDoc.data();
+        return {
+          id: requestDoc.id,
+          fromUid: (data.fromUid as string) || '',
+          toUid: (data.toUid as string) || '',
+          fromName: (data.fromName as string) || 'Community Member',
+          fromEmail: (data.fromEmail as string) || '',
+          status: ((data.status as 'pending' | 'accepted' | 'rejected') || 'pending'),
+          createdAt: (data.createdAt as string) || '',
+          updatedAt: (data.updatedAt as string) || '',
+        } as FriendRequest;
+      })
+      .sort((firstRequest, secondRequest) => {
+        return new Date(secondRequest.createdAt || 0).getTime() - new Date(firstRequest.createdAt || 0).getTime();
+      });
+  } catch (error) {
+    if (isPermissionError(error)) {
+      console.warn('Incoming friend requests not accessible with current Firestore rules.');
+      return [];
+    }
+
+    console.error('Error fetching friend requests:', error);
+    throw error;
+  }
+};
+
+export const getOutgoingFriendRequestUserIds = async (userUid: string): Promise<string[]> => {
+  try {
+    const requestSnapshot = await getDocs(
+      query(
+        collection(db, 'friend_requests'),
+        where('fromUid', '==', userUid),
+        where('status', '==', 'pending')
+      )
+    );
+
+    const outgoingRequestIds = requestSnapshot.docs
+      .map((requestDoc) => requestDoc.data().toUid as string)
+      .filter((toUid) => typeof toUid === 'string' && toUid.length > 0);
+
+    return Array.from(new Set(outgoingRequestIds));
+  } catch (error) {
+    if (isPermissionError(error)) {
+      console.warn('Outgoing friend requests not accessible with current Firestore rules.');
+      return [];
+    }
+
+    console.error('Error fetching outgoing friend requests:', error);
+    throw error;
+  }
+};
+
+export const acceptFriendRequest = async (request: FriendRequest): Promise<void> => {
+  try {
+    const now = new Date().toISOString();
+
+    await setDoc(
+      doc(db, 'users', request.toUid),
+      {
+        friendIds: arrayUnion(request.fromUid),
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    await updateDoc(doc(db, 'friend_requests', request.id), {
+      status: 'accepted',
+      updatedAt: now,
+    });
+  } catch (error) {
+    console.error('Error accepting friend request:', error);
+    throw error;
+  }
+};
+
+export const rejectFriendRequest = async (requestId: string): Promise<void> => {
+  try {
+    await updateDoc(doc(db, 'friend_requests', requestId), {
+      status: 'rejected',
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error rejecting friend request:', error);
+    throw error;
+  }
+};
+
+export const getUserFriends = async (userUid: string): Promise<FriendProfile[]> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userUid));
+    if (!userDoc.exists()) {
+      return [];
+    }
+
+    const userData = userDoc.data() as { friendIds?: string[] };
+    const friendIdsFromProfile = Array.isArray(userData.friendIds) ? userData.friendIds : [];
+
+    // Include users whose outgoing request from this user has been accepted.
+    // This keeps sender-side friend state accurate even if friendIds is not mirrored yet.
+    const acceptedOutgoingRequests = await getDocs(
+      query(
+        collection(db, 'friend_requests'),
+        where('fromUid', '==', userUid),
+        where('status', '==', 'accepted')
+      )
+    );
+
+    const acceptedFriendIds = acceptedOutgoingRequests.docs
+      .map((requestDoc) => requestDoc.data().toUid as string)
+      .filter((toUid) => typeof toUid === 'string' && toUid.length > 0);
+
+    const friendIds = Array.from(new Set([...friendIdsFromProfile, ...acceptedFriendIds]));
+    if (friendIds.length === 0) {
+      return [];
+    }
+
+    const allUsers = await getAllUsers();
+    return allUsers
+      .filter((user) => friendIds.includes(user.id))
+      .map((user) => {
+        return {
+          id: user.id,
+          email: user.email || '',
+          fullName: user.fullName || 'Community Member',
+          profileImageUrl: user.profileImageUrl || '',
+          location: user.location || '',
+          profession: user.profession || '',
+          about: user.about || '',
+          friendedAt: '',
+        } as FriendProfile;
+      });
+  } catch (error) {
+    if (isPermissionError(error)) {
+      console.warn('Friends list not accessible with current Firestore rules.');
+      return [];
+    }
+
+    console.error('Error fetching friends:', error);
     throw error;
   }
 };
@@ -195,6 +448,7 @@ export const sendMessage = async (
       doc(db, 'chats', chatId),
       {
         lastMessage: text,
+        lastMessageSenderUid: senderUid,
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
@@ -268,14 +522,20 @@ export const subscribeChatPreviews = (
             const chatData = chatDoc.data() as ChatDocument;
             const participantIds = chatData.participants || [];
             const otherParticipantUid = participantIds.find((participantId) => participantId !== userUid);
+            const otherParticipantProfile = otherParticipantUid
+              ? await getUserProfile(otherParticipantUid)
+              : null;
 
             const participantNames = chatData.participantNames || {};
-            const chatName =
-              chatData.chatName ||
+            const isDirectChat = participantIds.length === 2;
+            const directChatName =
+              otherParticipantProfile?.fullName ||
               (otherParticipantUid ? participantNames[otherParticipantUid] : undefined) ||
-              'Chat';
+              '';
+            const chatName = isDirectChat ? directChatName || 'Chat' : chatData.chatName || 'Chat';
 
             let lastMessageText = chatData.lastMessage || '';
+            let lastMessageSenderUid = chatData.lastMessageSenderUid || '';
             let updatedAt = chatData.updatedAt || '';
 
             if (!lastMessageText) {
@@ -290,6 +550,7 @@ export const subscribeChatPreviews = (
               if (!latestMessageSnapshot.empty) {
                 const latestMessageData = latestMessageSnapshot.docs[0].data() as Message;
                 lastMessageText = latestMessageData.text || '';
+                lastMessageSenderUid = latestMessageData.senderUid || '';
                 updatedAt = latestMessageData.timestamp || updatedAt;
               }
             }
@@ -297,11 +558,13 @@ export const subscribeChatPreviews = (
             return {
               id: chatDoc.id,
               name: chatName,
+              avatarUrl: otherParticipantProfile?.profileImageUrl || '',
               lastMessage: lastMessageText || 'Start your conversation here.',
+              lastMessageSenderUid,
               time: formatRelativeTime(updatedAt),
               unreadCount: 0,
               updatedAt,
-            } as ChatPreview & { updatedAt?: string };
+            } as ChatPreview;
           })
         );
 
@@ -311,9 +574,7 @@ export const subscribeChatPreviews = (
           return secondTime - firstTime;
         });
 
-        onUpdate(
-          previews.map(({ updatedAt: _updatedAt, ...chatPreview }) => chatPreview)
-        );
+        onUpdate(previews);
       } catch (error) {
         console.error('Error preparing chat previews:', error);
         if (onError) {

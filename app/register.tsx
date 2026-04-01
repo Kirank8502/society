@@ -313,6 +313,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 6,
     marginTop: 2,
   },

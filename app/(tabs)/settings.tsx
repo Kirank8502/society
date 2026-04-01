@@ -1,31 +1,52 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { logoutUser } from '../services/authService';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+import { getCurrentUser, logoutUser } from '../services/authService';
+import { getUserProfile } from '../services/firestoreService';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [privateProfile, setPrivateProfile] = useState(false);
+  const [userId, setUserId] = useState('');
   const [showOnlineStatus, setShowOnlineStatus] = useState(true);
-  const profile = {
+  const notificationsModuleRef = useRef<typeof import('expo-notifications') | null>(null);
+  const notificationHandlerConfiguredRef = useRef(false);
+  const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+  // const profile = {
+  const [profile, setProfileData] = useState({
     fullName: 'My Profile',
     email: 'you@community.com',
     location: 'Austin, TX',
+    profileImageUrl: '',
+  });
+
+  const getNotificationsModule = async () => {
+    if (notificationsModuleRef.current) {
+      return notificationsModuleRef.current;
+    }
+
+    const notificationsModule = await import('expo-notifications');
+    notificationsModuleRef.current = notificationsModule;
+
+    if (!notificationHandlerConfiguredRef.current) {
+      notificationsModule.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+      notificationHandlerConfiguredRef.current = true;
+    }
+
+    return notificationsModule;
   };
 
   const handleLogout = async () => {
@@ -44,6 +65,32 @@ export default function SettingsScreen() {
     }
   };
 
+  useEffect(() => {
+    const loadProfile = async () => {
+      const user = getCurrentUser();
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      setUserId(user.uid);
+      try {
+        const profile = await getUserProfile(user.uid);
+        setProfileData({
+          fullName: profile?.fullName || user.displayName || '',
+          location: profile?.location || '',
+          email: user.email || '',
+          profileImageUrl: profile?.profileImageUrl || '',
+        });
+      } catch (error) {
+        Alert.alert('Error', 'Failed to load profile. Please try again.');
+      } finally {
+      }
+    };
+  
+    loadProfile();
+  }, [router]);
+
   const handlePushNotificationsToggle = async (enabled: boolean) => {
     if (!enabled) {
       setPushNotifications(false);
@@ -56,7 +103,17 @@ export default function SettingsScreen() {
       return;
     }
 
+    if (isExpoGo) {
+      Alert.alert(
+        'Development Build Required',
+        'Push notifications are unavailable in Expo Go on Android (SDK 53+). Use a development build to enable this feature.'
+      );
+      setPushNotifications(false);
+      return;
+    }
+
     try {
+      const Notifications = await getNotificationsModule();
       const permission = await Notifications.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert('Permission Required', 'Please allow notifications to enable this setting.');
@@ -103,7 +160,11 @@ export default function SettingsScreen() {
 
         <View style={styles.profileRow}>
           <View style={styles.profileAvatar}>
-            <ThemedText style={styles.profileAvatarText}>{profile.fullName.charAt(0)}</ThemedText>
+            {profile.profileImageUrl ? (
+              <Image source={{ uri: profile.profileImageUrl }} style={styles.profileAvatarImage} />
+            ) : (
+              <ThemedText style={styles.profileAvatarText}>{profile.fullName.charAt(0)}</ThemedText>
+            )}
           </View>
           <View style={styles.settingTextWrap}>
             <ThemedText style={styles.settingLabel}>{profile.fullName}</ThemedText>
@@ -117,7 +178,7 @@ export default function SettingsScreen() {
           <ThemedText style={styles.actionText}>Edit Profile</ThemedText>
         </Pressable>
 
-        <Pressable style={styles.actionRow}>
+        <Pressable style={styles.actionRow} onPress={() => router.push('/friends')}>
           <MaterialIcons name="person-add" size={18} color="#6b7280" />
           <ThemedText style={styles.actionText}>Manage Connections</ThemedText>
         </Pressable>
@@ -129,11 +190,16 @@ export default function SettingsScreen() {
         <View style={styles.settingRow}>
           <View style={styles.settingTextWrap}>
             <ThemedText style={styles.settingLabel}>Push Notifications</ThemedText>
-            <ThemedText style={styles.settingHint}>Receive updates from chats and activity.</ThemedText>
+            <ThemedText style={styles.settingHint}>
+              {isExpoGo
+                ? 'Use a development build to enable push notifications.'
+                : 'Receive updates from chats and activity.'}
+            </ThemedText>
           </View>
           <Switch
             value={pushNotifications}
             onValueChange={handlePushNotificationsToggle}
+            disabled={isExpoGo}
             trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
             thumbColor={pushNotifications ? '#3b5998' : '#f3f4f6'}
           />
@@ -264,6 +330,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f0ff',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   profileAvatarText: {
     color: '#3b5998',

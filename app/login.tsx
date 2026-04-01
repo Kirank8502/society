@@ -159,7 +159,7 @@ export default function LoginScreen() {
           </Pressable>
 
           <View style={styles.footerRow}>
-            <ThemedText style={styles.footerText}>Don’t have an account?</ThemedText>
+            <ThemedText style={styles.footerText}>Don't have an account?</ThemedText>
             <Link href="/register" style={styles.footerLink}>
               Register
             </Link>
@@ -267,6 +267,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 6,
     marginTop: 2,
   },

@@ -29,6 +29,13 @@
       "expo-router",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Maru Rajput Samaj to access your photos for your profile picture.",
+          "cameraPermission": "Allow Maru Rajput Samaj to use your camera for your profile picture."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { getCurrentUser } from './services/authService';
@@ -124,7 +124,11 @@ export default function NewChatScreen() {
                 onPress={() => handleStartChat(user)}
                 disabled={startingChatWithId === user.id}>
                 <View style={styles.avatarWrap}>
-                  <ThemedText style={styles.avatarText}>{user.fullName.charAt(0)}</ThemedText>
+                  {user.profileImageUrl ? (
+                    <Image source={{ uri: user.profileImageUrl }} style={styles.avatarImage} />
+                  ) : (
+                    <ThemedText style={styles.avatarText}>{user.fullName.charAt(0)}</ThemedText>
+                  )}
                 </View>
 
                 <View style={styles.userInfoWrap}>
@@ -228,6 +232,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f0ff',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
     color: '#3b5998',
