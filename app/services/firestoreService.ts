@@ -1,21 +1,22 @@
 // Firestore service helpers
 import {
-  addDoc,
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  setDoc,
-  Unsubscribe,
-  updateDoc,
-  where,
+    addDoc,
+    arrayUnion,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    limit,
+    onSnapshot,
+    orderBy,
+    query,
+    setDoc,
+    Unsubscribe,
+    updateDoc,
+    where,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { auth, db, storage } from '../config/firebase';
 
 export interface UserProfile {
   id: string;
@@ -84,6 +85,25 @@ export interface FriendRequest {
   updatedAt: string;
 }
 
+export interface Post {
+  id: string;
+  authorUid: string;
+  authorName: string;
+  authorUsername: string;
+  authorProfileImageUrl: string;
+  caption: string;
+  mediaUrl: string;
+  mediaPath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PostMediaInput {
+  uri: string;
+  fileName?: string;
+  mimeType?: string;
+}
+
 type ChatDocument = {
   participants?: string[];
   participantNames?: Record<string, string>;
@@ -120,6 +140,153 @@ const formatRelativeTime = (timestamp?: string) => {
 const isPermissionError = (error: unknown): boolean => {
   const code = (error as { code?: string })?.code;
   return code === 'permission-denied' || code === 'firestore/permission-denied';
+};
+
+const normalizePost = (postId: string, data: Record<string, unknown>): Post => {
+  return {
+    id: postId,
+    authorUid: (data.authorUid as string) || '',
+    authorName: (data.authorName as string) || 'Community Member',
+    authorUsername: (data.authorUsername as string) || 'member',
+    authorProfileImageUrl: (data.authorProfileImageUrl as string) || '',
+    caption: (data.caption as string) || '',
+    mediaUrl: (data.mediaUrl as string) || '',
+    mediaPath: (data.mediaPath as string) || '',
+    createdAt: (data.createdAt as string) || '',
+    updatedAt: (data.updatedAt as string) || '',
+  };
+};
+
+const getAuthenticatedUser = async () => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('Please sign in again before creating a post.');
+  }
+
+  await currentUser.reload();
+  await currentUser.getIdToken(true);
+
+  const refreshedUser = auth.currentUser;
+  if (!refreshedUser) {
+    throw new Error('Please sign in again before creating a post.');
+  }
+
+  return refreshedUser;
+};
+
+export const uploadPostMedia = async (authorUid: string, media: PostMediaInput): Promise<{ mediaUrl: string; mediaPath: string }> => {
+  const currentUser = await getAuthenticatedUser();
+
+  if (currentUser.uid !== authorUid) {
+    throw new Error('Your sign-in state changed. Please sign in again before uploading post media.');
+  }
+
+  const fileExtension = media.fileName?.split('.').pop()?.toLowerCase() || 'jpg';
+  const contentType = media.mimeType || 'image/jpeg';
+  const mediaPath = `post-media/${authorUid}/${Date.now()}.${fileExtension}`;
+  const storageRef = ref(storage, mediaPath);
+
+  const response = await fetch(media.uri);
+  if (!response.ok) {
+    throw new Error('Unable to read selected media file for upload.');
+  }
+
+  const mediaBlob = await response.blob();
+  await uploadBytes(storageRef, mediaBlob, { contentType });
+
+  const mediaUrl = await getDownloadURL(storageRef);
+  return { mediaUrl, mediaPath };
+};
+
+export const createPost = async ({
+  authorUid,
+  authorName,
+  authorUsername,
+  authorProfileImageUrl,
+  caption,
+  media,
+}: {
+  authorUid: string;
+  authorName: string;
+  authorUsername: string;
+  authorProfileImageUrl: string;
+  caption: string;
+  media?: PostMediaInput | null;
+}): Promise<Post> => {
+  try {
+    const currentUser = await getAuthenticatedUser();
+
+    if (currentUser.uid !== authorUid) {
+      throw new Error('Your sign-in state changed. Please sign in again before creating a post.');
+    }
+
+    const now = new Date().toISOString();
+    const uploadedMedia = media ? await uploadPostMedia(authorUid, media) : { mediaUrl: '', mediaPath: '' };
+
+    const postRef = await addDoc(collection(db, 'posts'), {
+      authorUid: currentUser.uid,
+      authorName,
+      authorUsername,
+      authorProfileImageUrl,
+      caption,
+      mediaUrl: uploadedMedia.mediaUrl,
+      mediaPath: uploadedMedia.mediaPath,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      id: postRef.id,
+      authorUid: currentUser.uid,
+      authorName,
+      authorUsername,
+      authorProfileImageUrl,
+      caption,
+      mediaUrl: uploadedMedia.mediaUrl,
+      mediaPath: uploadedMedia.mediaPath,
+      createdAt: now,
+      updatedAt: now,
+    };
+  } catch (error) {
+    console.error('Error creating post:', error);
+    throw error;
+  }
+};
+
+export const getPosts = async (): Promise<Post[]> => {
+  try {
+    const snapshot = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
+    return snapshot.docs.map((postDoc) => normalizePost(postDoc.id, postDoc.data()));
+  } catch (error) {
+    if (isPermissionError(error)) {
+      console.warn('Posts not accessible with current Firestore rules.');
+      return [];
+    }
+
+    console.error('Error fetching posts:', error);
+    throw error;
+  }
+};
+
+export const subscribePosts = (
+  onUpdate: (posts: Post[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe => {
+  const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    postsQuery,
+    (querySnapshot) => {
+      const posts = querySnapshot.docs.map((postDoc) => normalizePost(postDoc.id, postDoc.data()));
+      onUpdate(posts);
+    },
+    (error) => {
+      console.error('Error subscribing to posts:', error);
+      if (onError) {
+        onError(error);
+      }
+    }
+  );
 };
 
 // Users
