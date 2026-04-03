@@ -240,7 +240,7 @@ export default function SettingsScreen() {
           <ThemedText style={styles.actionText}>Change Password</ThemedText>
         </Pressable>
 
-        <Pressable style={styles.actionRow}>
+        <Pressable style={styles.actionRow} onPress={() => router.push('/help-support')}>
           <MaterialIcons name="help-outline" size={18} color="#6b7280" />
           <ThemedText style={styles.actionText}>Help & Support</ThemedText>
         </Pressable>

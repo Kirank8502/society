@@ -104,6 +104,12 @@ export interface PostMediaInput {
   mimeType?: string;
 }
 
+export interface SupportRequestInput {
+  type: 'query' | 'bug';
+  subject: string;
+  message: string;
+}
+
 type ChatDocument = {
   participants?: string[];
   participantNames?: Record<string, string>;
@@ -788,5 +794,70 @@ export const createOrGetDirectChat = async (
   } catch (error) {
     console.error('Error creating direct chat:', error);
     throw error;
+  }
+};
+
+export const submitSupportRequest = async ({
+  type,
+  subject,
+  message,
+}: SupportRequestInput): Promise<void> => {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error('Please sign in again before sending support request.');
+  }
+
+  const now = new Date().toISOString();
+  const trimmedSubject = subject.trim();
+  const trimmedMessage = message.trim();
+
+  if (!trimmedSubject || !trimmedMessage) {
+    throw new Error('Subject and message are required.');
+  }
+
+  try {
+    await addDoc(collection(db, 'support_requests'), {
+      type,
+      subject: trimmedSubject,
+      message: trimmedMessage,
+      fromUid: currentUser.uid,
+      fromEmail: currentUser.email || '',
+      status: 'open',
+      createdAt: now,
+      updatedAt: now,
+    });
+  } catch (error) {
+    const errorCode = (error as { code?: string })?.code;
+    const isPermissionDenied = errorCode === 'permission-denied' || errorCode === 'firestore/permission-denied';
+
+    if (!isPermissionDenied) {
+      console.error('Error submitting support request:', error);
+      throw error;
+    }
+
+    // Fallback path for projects where support_requests rules are not deployed yet.
+    try {
+      await setDoc(
+        doc(db, 'users', currentUser.uid),
+        {
+          supportRequests: arrayUnion({
+            type,
+            subject: trimmedSubject,
+            message: trimmedMessage,
+            fromUid: currentUser.uid,
+            fromEmail: currentUser.email || '',
+            status: 'open',
+            createdAt: now,
+            updatedAt: now,
+          }),
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    } catch (fallbackError) {
+      console.error('Error submitting support request with fallback:', fallbackError);
+      throw fallbackError;
+    }
   }
 };
