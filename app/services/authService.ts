@@ -1,18 +1,23 @@
 // Authentication service helper
 import {
-    createUserWithEmailAndPassword,
-    fetchSignInMethodsForEmail,
-    signInWithEmailAndPassword,
-    signOut,
-    updateProfile,
-    User,
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  fetchSignInMethodsForEmail,
+  updatePassword as firebaseUpdatePassword,
+  reauthenticateWithCredential,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  User,
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 export type AuthUser = User | null;
 
-const isValidPassword = (value: string): boolean => {
+export const PASSWORD_RULE_MESSAGE = 'Password must be 6-10 characters and include uppercase, lowercase, number, and special character.';
+
+export const isValidPassword = (value: string): boolean => {
   return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{6,10}$/.test(value);
 };
 
@@ -26,9 +31,7 @@ export const registerUser = async (
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!isValidPassword(password)) {
-      const invalidPasswordError = new Error(
-        'Password must be 6-10 characters and include uppercase, lowercase, number, and special character.'
-      ) as Error & { code: string };
+      const invalidPasswordError = new Error(PASSWORD_RULE_MESSAGE) as Error & { code: string };
       invalidPasswordError.code = 'auth/invalid-password-format';
       throw invalidPasswordError;
     }
@@ -112,6 +115,33 @@ export const logoutUser = async (): Promise<void> => {
     console.error('Logout error:', error);
     throw error;
   }
+};
+
+// Change current user's password
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    const noUserError = new Error('No authenticated user found.') as Error & { code: string };
+    noUserError.code = 'auth/no-current-user';
+    throw noUserError;
+  }
+
+  if (!user.email) {
+    const noEmailError = new Error('Password change is not supported for this account.') as Error & { code: string };
+    noEmailError.code = 'auth/password-change-not-supported';
+    throw noEmailError;
+  }
+
+  if (!isValidPassword(newPassword)) {
+    const invalidPasswordError = new Error(PASSWORD_RULE_MESSAGE) as Error & { code: string };
+    invalidPasswordError.code = 'auth/invalid-password-format';
+    throw invalidPasswordError;
+  }
+
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await firebaseUpdatePassword(user, newPassword);
 };
 
 // Get current user

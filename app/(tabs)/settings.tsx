@@ -235,7 +235,7 @@ export default function SettingsScreen() {
       <View style={styles.sectionCard}>
         <ThemedText style={styles.sectionTitle}>Account</ThemedText>
 
-        <Pressable style={styles.actionRow}>
+        <Pressable style={styles.actionRow} onPress={() => router.push('/change-password')}>
           <MaterialIcons name="lock" size={18} color="#6b7280" />
           <ThemedText style={styles.actionText}>Change Password</ThemedText>
         </Pressable>
