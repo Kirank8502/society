@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
 	ActivityIndicator,
 	Alert,
+	Linking,
 	Pressable,
 	ScrollView,
 	StyleSheet,
@@ -11,12 +12,34 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { getCurrentUser } from '../services/authService';
 import {
+	BusinessListing,
 	createBusinessListing,
 	getBusinessListings,
-	BusinessListing,
 } from '../services/firestoreService';
-import { getCurrentUser } from '../services/authService';
+
+const phoneNumberPattern = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/;
+
+const isPhoneNumber = (value: string) => {
+	return phoneNumberPattern.test(value.trim()) && /\d/.test(value);
+};
+
+const openPhoneNumber = async (value: string) => {
+	const sanitizedValue = value.replace(/[^\d+]/g, '');
+	if (!sanitizedValue) {
+		return;
+	}
+
+	const phoneUrl = `tel:${sanitizedValue}`;
+	const canOpen = await Linking.canOpenURL(phoneUrl);
+	if (!canOpen) {
+		Alert.alert('Unable to Call', 'This device cannot open the phone app for that number.');
+		return;
+	}
+
+	await Linking.openURL(phoneUrl);
+};
 
 export default function BusinessScreen() {
 	const [ads, setAds] = useState<BusinessListing[]>([]);
@@ -185,10 +208,19 @@ export default function BusinessScreen() {
 
 						<ThemedText style={styles.adDescription}>{ad.description}</ThemedText>
 
-						<View style={styles.contactPill}>
-							<MaterialIcons name="phone" size={14} color="#9ca3af" />
-							<ThemedText style={styles.contactText}>{ad.contactInfo}</ThemedText>
-						</View>
+						{isPhoneNumber(ad.contactInfo) ? (
+							<Pressable
+								style={styles.contactPill}
+								onPress={() => openPhoneNumber(ad.contactInfo)}>
+								<MaterialIcons name="phone" size={14} color="#9ca3af" />
+								<ThemedText style={styles.contactText}>{ad.contactInfo}</ThemedText>
+							</Pressable>
+						) : (
+							<View style={styles.contactPill}>
+								<MaterialIcons name="phone" size={14} color="#9ca3af" />
+								<ThemedText style={styles.contactText}>{ad.contactInfo}</ThemedText>
+							</View>
+						)}
 					</View>
 				))}
 
